@@ -1,0 +1,10 @@
+{
+    "settings": {
+        "python.pythonPath": "C:\\Users\\JP\\Anaconda3\\envs\\tensorflow-gpu\\python.exe"
+    },
+    "folders": [
+        {
+            "path": "."
+        }
+    ]
+}

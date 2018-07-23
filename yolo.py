@@ -25,6 +25,10 @@ class YOLO(object):
     def __init__(self):
         self.model_path = 'model_data/yolo.h5' # model path or trained weights path
         self.anchors_path = 'model_data/yolo_anchors.txt'
+        
+        #self.model_path = 'model_data/yolo-tiny.h5' # model path or trained weights path
+        #self.anchors_path = 'model_data/tiny_yolo_anchors.txt'
+        
         self.classes_path = 'model_data/coco_classes.txt'
         self.score = 0.3
         self.iou = 0.45
