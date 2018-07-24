@@ -13,7 +13,7 @@ from collections import defaultdict
 import numpy as np
 from keras import backend as K
 from keras.layers import (Conv2D, Input, ZeroPadding2D, Add,
-                          UpSampling2D, MaxPooling2D, Concatenate)
+                          UpSampling2D, MaxPooling2D, Concatenate,SeparableConv2D)
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.normalization import BatchNormalization
 from keras.models import Model
@@ -165,14 +165,26 @@ def _main(args):
             if stride>1:
                 # Darknet uses left and top padding instead of 'same' mode
                 prev_layer = ZeroPadding2D(((1,0),(1,0)))(prev_layer)
-            conv_layer = (Conv2D(
+            
+            mobileNet=True
+            if mobileNet:
+                conv_layer = (SeparableConv2D(
                 filters, (size, size),
                 strides=(stride, stride),
                 kernel_regularizer=l2(weight_decay),
                 use_bias=not batch_normalize,
-                weights=conv_weights,
+                #weights=conv_weights,
                 activation=act_fn,
                 padding=padding))(prev_layer)
+            else:
+                conv_layer = (Conv2D(
+                    filters, (size, size),
+                    strides=(stride, stride),
+                    kernel_regularizer=l2(weight_decay),
+                    use_bias=not batch_normalize,
+                    weights=conv_weights,
+                    activation=act_fn,
+                    padding=padding))(prev_layer)
 
             if batch_normalize:
                 conv_layer = (BatchNormalization(
