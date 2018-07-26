@@ -7,95 +7,119 @@ from tensorflow.python.tools import optimize_for_inference_lib
 import os
 import yolo3.model
 # Load existing model.
-with open("model.yaml",'r') as f:
-    modelyaml = f.read()
 
-model = model_from_yaml(modelyaml,custom_objects={'box_iou':yolo3.model.box_iou,'yolo_head':yolo3.model.yolo_head})
-model.load_weights("model_weights.hdf5")
+def ConvertToPB(yamlFile, WeightFile, ExportName = "converted"):
+    with open(yamlFile,'r') as f:
+        modelyaml = f.read()
 
-# All new operations will be in test mode from now on.
-K.set_learning_phase(0)
+    model = model_from_yaml(modelyaml,custom_objects={'box_iou':yolo3.model.box_iou,'yolo_head':yolo3.model.yolo_head})
+    model.load_weights(WeightFile)
 
-# Serialize the model and get its weights, for quick re-building.
-config = model.get_config()
-weights = model.get_weights()
+    # All new operations will be in test mode from now on.
+    K.set_learning_phase(0)
 
-# Re-build a model where the learning phase is now hard-coded to 0.
-#new_model = Sequential.from_config(config)
-#new_model.set_weights(weights)
+    # Serialize the model and get its weights, for quick re-building.
+    config = model.get_config()
+    weights = model.get_weights()
 
-temp_dir = "graph"
-checkpoint_prefix = os.path.join(temp_dir, "saved_checkpoint")
-checkpoint_state_name = "checkpoint_state"
-input_graph_name = "input_graph.pb"
-output_graph_name = "output_graph.pb"
-output_optimized_graph_name= "opt_output_graph.pb"
+    # Re-build a model where the learning phase is now hard-coded to 0.
+    #new_model = Sequential.from_config(config)
+    #new_model.set_weights(weights)
 
+    temp_dir = "graph/" + ExportName
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
 
-# Temporary save graph to disk without weights included.
-saver = tf.train.Saver()
-checkpoint_path = saver.save(K.get_session(), checkpoint_prefix, global_step=0, latest_filename=checkpoint_state_name)
-tf.train.write_graph(K.get_session().graph, temp_dir, input_graph_name)
-
-input_graph_path = os.path.join(temp_dir, input_graph_name)
-input_saver_def_path = ""
-input_binary = False
-#[node.op.name for node in model.outputs]
-output_node_names = [node.op.name for node in model.outputs][0] # model dependent
-restore_op_name = "save/restore_all"
-filename_tensor_name = "save/Const:0"
-output_graph_path = os.path.join(temp_dir, output_graph_name)
-clear_devices = False
-
-# Embed weights inside the graph and save to disk.
-freeze_graph.freeze_graph(input_graph_path, input_saver_def_path,
-                          input_binary, checkpoint_path,
-                          output_node_names, restore_op_name,
-                          filename_tensor_name, output_graph_path,
-                          clear_devices, "")
+    checkpoint_prefix = os.path.join(temp_dir, "saved_checkpoint")
+    checkpoint_state_name = "checkpoint_state"
+    input_graph_name = ExportName+"_input_graph.pb"
+    output_graph_name = ExportName+"_output_graph.pb"
+    output_optimized_graph_name= ExportName+"_opt_output_graph.pb"
 
 
-input_graph_def = tf.GraphDef()
-with tf.gfile.Open(output_graph_path, "rb") as f:
-    data = f.read()
-    input_graph_def.ParseFromString(data)
+    # Temporary save graph to disk without weights included.
+    saver = tf.train.Saver()
+    checkpoint_path = saver.save(K.get_session(), checkpoint_prefix, global_step=0, latest_filename=checkpoint_state_name)
+    tf.train.write_graph(K.get_session().graph, temp_dir, input_graph_name)
 
-#input_graph_def = tf.graph_util.remove_training_nodes(input_graph_def)
+    input_graph_path = os.path.join(temp_dir, input_graph_name)
+    input_saver_def_path = ""
+    input_binary = False
+    #[node.op.name for node in model.outputs]
+    output_node_names = [node.op.name for node in model.outputs][0] # model dependent
+    restore_op_name = "save/restore_all"
+    filename_tensor_name = "save/Const:0"
+    output_graph_path = os.path.join(temp_dir, output_graph_name)
+    clear_devices = False
+
+    # Embed weights inside the graph and save to disk.
+    freeze_graph.freeze_graph(input_graph_path, input_saver_def_path,
+                            input_binary, checkpoint_path,
+                            output_node_names, restore_op_name,
+                            filename_tensor_name, output_graph_path,
+                            clear_devices, "")
 
 
-output_graph_def = optimize_for_inference_lib.optimize_for_inference(
-        input_graph_def,
-        [node.op.name for node in model.inputs], # an array of the input node(s)
-        [output_node_names], # an array of output nodes
-        tf.float32.as_datatype_enum)
+    input_graph_def = tf.GraphDef()
+    with tf.gfile.Open(output_graph_path, "rb") as f:
+        data = f.read()
+        input_graph_def.ParseFromString(data)
 
-# Save the optimized graph
-
-f = tf.gfile.FastGFile(output_optimized_graph_name, "w")
-f.write(output_graph_def.SerializeToString())
+    #input_graph_def = tf.graph_util.remove_training_nodes(input_graph_def)
 
 
+    output_graph_def = optimize_for_inference_lib.optimize_for_inference(
+            input_graph_def,
+            [node.op.name for node in model.inputs], # an array of the input node(s)
+            [output_node_names], # an array of output nodes
+            tf.float32.as_datatype_enum)
 
-from tensorflow.python.tools import import_pb_to_tensorboard,
+    # Save the optimized graph
 
-import_pb_to_tensorboard.import_to_tensorboard(output_graph_path,"logs/pb/")
-import_pb_to_tensorboard.import_to_tensorboard(output_optimized_graph_name,"logs/pb_opt/")
+    f = tf.gfile.FastGFile(output_optimized_graph_name, "w")
+    f.write(output_graph_def.SerializeToString())
+
+
+    from tensorflow.python.tools import import_pb_to_tensorboard
+    import_pb_to_tensorboard.import_to_tensorboard(output_graph_path,"logs/%s/"%ExportName)
+    #import_pb_to_tensorboard.import_to_tensorboard(output_optimized_graph_name,"logs/pb_opt/")
 
 
 #check summary
 
 #bazel run tensorflow/tools/graph_transforms:summarize_graph -- --in_graph=/mnt/d/dev/keras-yolo3-jp2/opt_output_graph.pb
-
+# '''
 #bazel-bin/tensorflow/contrib/lite/toco/toco --input_file=/mnt/d/dev/keras-yolo3-jp2/graph/output_graph.pb --input_format=TENSORFLOW_GRAPHDEF --output_format=TFLITE --output_file=/mnt/d/dev/keras-yolo3-jp2/graph/output.lite --inference_input_type=FLOAT --input_data_type=FLOAT --input_array=input_1_7 --output_arrays=separable_conv2d_10_5/BiasAdd --input_shape=1,224,224,3 --mean_value=127 --std_value=127
-bazel-bin/tensorflow/contrib/lite/toco/toco \
---input_file=/mnt/d/dev/keras-yolo3-jp2/graph/output_graph.pb \
---output_file=/mnt/d/dev/keras-yolo3-jp2/graph/output.lite \
---input_format=TENSORFLOW_GRAPHDEF \
---output_format=TFLITE \
---inference_type=QUANTIZED_UINT8 \
---input_array=input_1_7 \
---output_arrays=separable_conv2d_10_5/BiasAdd \
---input_shape=1,224,224,3 \
---mean_value=127.5 --std_value=127.5 \
---default_ranges_min=0 --default_ranges_max=6 \
---allow_nudging_weights_to_use_fast_gemm_kernel
+
+if __name__ == '__main__':
+    ConvertToPB('','','')
+
+
+'''
+ bazel-bin/tensorflow/contrib/lite/toco/toco \
+ --input_file=/mnt/d/dev/keras-yolo3-jp2/graph/Tiny-Yolo/Tiny-Yolo_output_graph.pb \
+ --output_file=/mnt/d/dev/keras-yolo3-jp2/graph/Tiny-Yolo/Tiny-Yolo.tflite \
+ --input_format=TENSORFLOW_GRAPHDEF \
+ --output_format=TFLITE \
+ --inference_type=QUANTIZED_UINT8 \
+ --input_array=input_1_3 \
+ --output_arrays=conv2d_10_2/BiasAdd \
+ --input_shape=1,224,224,3 \
+ --mean_value=127.5 --std_value=127.5 \
+ --default_ranges_min=0 --default_ranges_max=6 \
+ --allow_nudging_weights_to_use_fast_gemm_kernel
+ 
+  bazel-bin/tensorflow/contrib/lite/toco/toco \
+ --input_file=/mnt/d/dev/keras-yolo3-jp2/graph/Yolo_body/Yolo_body_output_graph.pb \
+ --output_file=/mnt/d/dev/keras-yolo3-jp2/graph/Yolo_body/quant_Yolo_body.tflite \
+ --input_format=TENSORFLOW_GRAPHDEF \
+ --output_format=TFLITE \
+ --inference_type=FLOAT \
+ --input_array=input_1_1 \
+ --output_arrays=conv2d_59_1/BiasAdd \
+ --input_shape=1,224,224,3 \
+ --mean_value=127.5 --std_value=127.5 \
+ --default_ranges_min=0 --default_ranges_max=6 \
+ --allow_nudging_weights_to_use_fast_gemm_kernel
+
+ '''

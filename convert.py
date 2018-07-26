@@ -20,6 +20,7 @@ from keras.models import Model
 from keras.regularizers import l2
 from keras.utils.vis_utils import plot_model as plot
 
+MOBILENET = False
 
 parser = argparse.ArgumentParser(description='Darknet To Keras Converter.')
 parser.add_argument('config_path', help='Path to Darknet cfg file.')
@@ -166,8 +167,7 @@ def _main(args):
                 # Darknet uses left and top padding instead of 'same' mode
                 prev_layer = ZeroPadding2D(((1,0),(1,0)))(prev_layer)
             
-            mobileNet=True
-            if mobileNet:
+            if MOBILENET:
                 conv_layer = (SeparableConv2D(
                 filters, (size, size),
                 strides=(stride, stride),
@@ -257,6 +257,12 @@ def _main(args):
         model.save('{}'.format(output_path))
         print('Saved Keras model to {}'.format(output_path))
 
+    path, file = os.path.split(output_root)
+    yamlfile = file + ".yaml"
+    model_yaml = model.to_yaml()
+    with open(yamlfile, "w") as json_file:
+        json_file.write(model_yaml)
+
     # Check to see if all weights have been read.
     remaining_weights = len(weights_file.read()) / 4
     weights_file.close()
@@ -268,6 +274,10 @@ def _main(args):
     if args.plot_model:
         plot(model, to_file='{}.png'.format(output_root), show_shapes=True)
         print('Saved model plot to {}.png'.format(output_root))
+
+
+    from Keras2Android import ConvertToPB
+    ConvertToPB(yamlfile,output_path,file)
 
 
 if __name__ == '__main__':
