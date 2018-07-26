@@ -13,6 +13,7 @@ from keras.regularizers import l2
 
 from yolo3.utils import compose
 
+MOBILENET = False
 
 @wraps(SeparableConv2D)
 def DarknetConv2D(*args, **kwargs):
@@ -20,7 +21,9 @@ def DarknetConv2D(*args, **kwargs):
     darknet_conv_kwargs = {'kernel_regularizer': l2(5e-4)}
     darknet_conv_kwargs['padding'] = 'valid' if kwargs.get('strides')==(2,2) else 'same'
     darknet_conv_kwargs.update(kwargs)
-    return SeparableConv2D(*args, **darknet_conv_kwargs)
+    if MOBILENET:
+        return SeparableConv2D(*args, **darknet_conv_kwargs)
+    return Conv2D(*args, **darknet_conv_kwargs)
 
 def DarknetConv2D_BN_Leaky(*args, **kwargs):
     """Darknet Convolution2D followed by BatchNormalization and LeakyReLU."""
@@ -343,6 +346,7 @@ def box_iou(b1, b2):
 
 
 def yolo_loss(args, anchors, num_classes, ignore_thresh=.5, print_loss=False):
+    import tensorflow as tf #fix for serialisation
     '''Return yolo_loss tensor
 
     Parameters
